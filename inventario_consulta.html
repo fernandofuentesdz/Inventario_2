@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Consulta de Inventario</title>
+    <!-- Carga de Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Se eliminó la librería html2canvas -->
+    <style>
+        /* Configuración de la fuente Inter y estilo base */
+        :root {
+            font-family: 'Inter', sans-serif;
+        }
+        /* Estilos personalizados para inputs numéricos en móvil */
+        input[type="number"] {
+            -moz-appearance: textfield; /* Firefox */
+        }
+        input::-webkit-outer-spin-button,
+        input::-webkit-inner-spin-button {
+            -webkit-appearance: none; /* Chrome, Safari, Edge */
+            margin: 0;
+        }
+        .container-app {
+            min-height: 100vh;
+        }
+        .loading-overlay {
+            background-color: rgba(255, 255, 255, 0.9);
+            z-index: 50;
+        }
+        /* Clase para hacer los encabezados de tabla clickeables (cursor y padding) */
+        .sortable-header {
+            cursor: pointer;
+            padding-right: 2rem !important; /* Espacio para el ícono de ordenación */
+            position: relative;
+        }
+        .sort-icon {
+            position: absolute;
+            right: 0.5rem;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 0.75rem; /* 12px */
+            height: 0.75rem; /* 12px */
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+        .sort-icon svg {
+            fill: currentColor;
+            width: 100%;
+            height: 100%;
+        }
+        .sort-icon .active {
+            color: #1d4ed8; /* primary color */
+        }
+        .sort-icon .inactive {
+            color: #d1d5db; /* gray-300 */
+        }
+    </style>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        'primary': '#1d4ed8', /* blue-700 */
+                        'secondary': '#60a5fa', /* blue-400 */
+                        'bg-light': '#f9fafb', /* gray-50 */
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-bg-light text-gray-800">
+
+    <div id="app" class="container-app p-4 md:p-8">
+        <!-- Encabezado -->
+        <header class="text-center mb-8">
+            <h1 class="3xl font-extrabold text-primary mb-2">Consulta de Inventario</h1>
+            <p class="text-gray-500">Filtra por supervisor y busca artículos para ver detalles.</p>
+        </header>
+
+        <!-- Contenedor principal de la aplicación -->
+        <div class="max-w-4xl mx-auto space-y-8">
+            <!-- Loading Overlay -->
+            <div id="loading" class="loading-overlay fixed inset-0 flex items-center justify-center">
+                <div class="flex flex-col items-center p-6 bg-white rounded-xl shadow-2xl">
+                    <div class="animate-spin rounded-full h-10 w-10 border-b-4 border-primary"></div>
+                    <p class="mt-4 font-semibold text-lg text-primary">Cargando datos...</p>
+                    <p class="text-sm text-gray-500 mt-1">Esto puede tardar unos segundos dependiendo de la base de datos.</p>
+                </div>
+            </div>
+
+            <!-- Filtro de Supervisor -->
+            <div class="bg-white p-6 rounded-xl shadow-lg">
+                <h2 class="text-xl font-semibold mb-3 text-primary">1. Seleccionar Supervisor</h2>
+                <div class="flex flex-col sm:flex-row gap-4">
+                    <select id="supervisorSelect" class="w-full sm:w-1/2 p-3 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary transition duration-150 shadow-sm" disabled>
+                        <option value="">Cargando supervisores...</option>
+                    </select>
+                    <button id="resetButton" class="w-full sm:w-auto px-4 py-3 bg-gray-200 text-gray-700 font-medium rounded-lg hover:bg-gray-300 transition duration-150 shadow-md" onclick="resetFilters()">
+                        Limpiar Filtros
+                    </button>
+                </div>
+            </div>
+
+            <!-- Búsqueda de Artículo -->
+            <div id="searchContainer" class="bg-white p-6 rounded-xl shadow-lg border border-gray-200 hidden">
+                <h2 class="text-xl font-semibold mb-3 text-primary">2. Buscar Artículo (Solo números)</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="relative">
+                        <label for="inputBarra" class="block text-sm font-medium text-gray-700 mb-1">Buscar por BARRA</label>
+                        <input type="text" id="inputBarra" inputmode="numeric" pattern="[0-9]*" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-secondary focus:border-secondary transition duration-150 shadow-sm" placeholder="Ingrese número de BARRA">
+                        <p class="absolute right-3 top-10 text-xs text-gray-400">#</p>
+                    </div>
+                    <div class="relative">
+                        <label for="inputArticulo" class="block text-sm font-medium text-gray-700 mb-1">Buscar por ARTICULO</label>
+                        <input type="text" id="inputArticulo" inputmode="numeric" pattern="[0-9]*" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-secondary focus:border-secondary transition duration-150 shadow-sm" placeholder="Ingrese número de ARTICULO">
+                        <p class="absolute right-3 top-10 text-xs text-gray-400">#</p>
+                    </div>
+                </div>
+                <div id="searchMessage" class="mt-4 p-3 text-sm rounded-lg bg-yellow-100 text-yellow-700 border border-yellow-200 hidden"></div>
+            </div>
+
+            <!-- Se eliminó el botón de Capturar Imagen -->
+
+            <!-- RESULTS CONTAINER -->
+            <div id="resultsContainer" class="space-y-8 hidden">
+                <!-- Resultados del Artículo (Resumen) - PUNTO 3 -->
+                <div id="summaryContainer" class="bg-white p-6 rounded-xl shadow-lg border-t-4 border-primary">
+                    <h2 class="text-xl font-bold mb-4 text-primary">3. Resumen del Artículo</h2>
+                    <div id="articleSummary" class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
+                        <!-- Contenido del resumen se insertará aquí -->
+                    </div>
+                </div>
+
+                <!-- Información Detallada por Sala (Tabla) - PUNTO 4 -->
+                <div id="detailContainer" class="bg-white p-6 rounded-xl shadow-lg border-t-4 border-secondary">
+                    <h2 class="text-xl font-bold mb-4 text-secondary">4. Detalle de Existencias por Sala</h2>
+                    
+                    <div class="overflow-x-auto">
+                        <!-- ID añadido a la tabla para la captura -->
+                        <table id="inventoryTable" class="min-w-full divide-y divide-gray-200">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <!-- SALA CONCATENADA (antes COD_SALA y NOMBE_SALA) -->
+                                    <th id="header-COD_SALA" class="w-2/6 px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider rounded-tl-lg sortable-header" data-column="COD_SALA" data-type="string" data-order="asc">
+                                        <div class="flex items-center justify-between">
+                                            SALA
+                                            <div class="sort-icon">
+                                                <!-- Icono SVG de flecha arriba/abajo -->
+                                                <svg class="h-full w-full" viewBox="0 0 24 24" fill="currentColor">
+                                                    <path d="M12 5l-4 4h8z" class="sort-asc inactive" data-dir="asc"/>
+                                                    <path d="M12 19l-4-4h8z" class="sort-desc inactive" data-dir="desc"/>
+                                                </svg>
+                                            </div>
+                                        </div>
+                                    </th>
+                                    <!-- EXISTENCIA: Habilitado para ordenar -->
+                                    <th id="header-EXISTENCIA" class="w-1/6 px-2 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider sortable-header" data-column="EXISTENCIA" data-type="numeric" data-order="asc">
+                                        <div class="flex items-center justify-end">
+                                            EXISTENCIA
+                                            <div class="sort-icon ml-1">
+                                                <!-- Icono SVG de flecha arriba/abajo -->
+                                                <svg class="h-full w-full" viewBox="0 0 24 24" fill="currentColor">
+                                                    <path d="M12 5l-4 4h8z" class="sort-asc inactive" data-dir="asc"/>
+                                                    <path d="M12 19l-4-4h8z" class="sort-desc inactive" data-dir="desc"/>
+                                                </svg>
+                                            </div>
+                                        </div>
+                                    </th>
+                                    <th class="w-1/6 px-2 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">TRANSITOS</th>
+                                    <th class="w-1/6 px-2 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">PEDIDO SALA</th>
+                                    <!-- NUEVO CAMPO: DOH -->
+                                    <th class="w-1/6 px-2 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider rounded-tr-lg">DOH</th> 
+                                </tr>
+                            </thead>
+                            <tbody id="salaDetailTableBody" class="bg-white divide-y divide-gray-200">
+                                <!-- Filas de detalle se insertarán aquí -->
+                            </tbody>
+                        </table>
+                    </div>
+                    <!-- Nota de Actualización -->
+                    <p id="fechaActualizacion" class="text-xs text-gray-500 mt-4 text-center"></p>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script type="module">
+        // La URL ha sido modificada para solicitar la hoja de cálculo en formato CSV.
+        const INVENTORY_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vR90oj-EdHyqexUB4wxBfq81uL9uhhjv5dJO7vFdDjVZX-Vgu-cp9o4OQlQlmhsUu69-Y10vGexKPak/pub?output=csv';
+        
+        // El delimitador se ha fijado a '|' según lo solicitado por el usuario.
+        const DELIMITER = '|';
+
+        // Mapeo de columnas
+        const COLUMNS = {
+            SUPERVISOR: 'SUPERVISOR',
+            BARRA: 'BARRA',
+            ARTICULO: 'ARTICULO',
+            DESCRIPCION: 'DESCRIPCION',
+            MARCA: 'MARCA',
+            STATUS_MARCA: 'STATUS MARCA',
+            STOCK_RANSA: 'STOCK RANSA',
+            UXC: 'UXC',
+            COD_SALA: 'COD_SALA',
+            NOMBRE_SALA: 'NOMBE_SALA', 
+            EXISTENCIA: 'EXISTENCIA',
+            TRANSITOS: 'TRANSITOS A SALAS UDS',
+            PEDIDO_SALA: 'PEDIDO SALA',
+            DOH: 'DOH', // Mapeo para el nuevo campo DOH
+            FECHA_ACTUALIZACION: 'FECHA ACTUALIZACION' // Nuevo campo
+        };
+
+        let allInventoryData = []; 
+        let filteredData = [];      
+        let currentDetailRows = []; 
+        let currentSortColumn = null;
+        let currentSortOrder = 'asc';
+        
+        // Referencias del DOM
+        const loadingDiv = document.getElementById('loading');
+        const supervisorSelect = document.getElementById('supervisorSelect');
+        const searchContainer = document.getElementById('searchContainer');
+        const inputBarra = document.getElementById('inputBarra');
+        const inputArticulo = document.getElementById('inputArticulo');
+        const searchMessage = document.getElementById('searchMessage');
+        const summaryContainer = document.getElementById('summaryContainer');
+        const articleSummary = document.getElementById('articleSummary');
+        const detailContainer = document.getElementById('detailContainer');
+        const salaDetailTableBody = document.getElementById('salaDetailTableBody');
+        const fechaActualizacionElement = document.getElementById('fechaActualizacion');
+
+
+        // Nuevas referencias para el contenedor principal de resultados y el botón
+        const resultsContainer = document.getElementById('resultsContainer');
+        // Se eliminó la referencia a captureButtonContainer
+
+        /**
+         * Muestra un mensaje de error o éxito.
+         * @param {string} message Mensaje a mostrar.
+         * @param {string} type 'error' o 'info'.
+         * @param {HTMLElement} targetElement Elemento donde mostrar el mensaje (por defecto: searchMessage).
+         */
+        const showMessage = (message, type = 'error', targetElement = searchMessage) => {
+            targetElement.textContent = message;
+            targetElement.classList.remove('hidden', 'bg-red-100', 'text-red-700', 'bg-yellow-100', 'text-yellow-700', 'bg-green-100', 'text-green-700');
+            
+            if (type === 'error') {
+                targetElement.classList.add('bg-red-100', 'text-red-700', 'border-red-200');
+            } else if (type === 'info') {
+                targetElement.classList.add('bg-yellow-100', 'text-yellow-700', 'border-yellow-200');
+            } else if (type === 'success') {
+                targetElement.classList.add('bg-green-100', 'text-green-700', 'border-green-200');
+            }
+            
+            if (!message) {
+                 targetElement.classList.add('hidden');
+            } else {
+                 targetElement.classList.remove('hidden');
+            }
+             setTimeout(() => targetElement.classList.add('hidden'), 5000);
+        };
+
+        /**
+         * Extrae los datos del archivo CSV de Google Sheets.
+         * @returns {Array<Object>} Array de objetos con los datos del inventario.
+         */
+        async function fetchAndParseInventory() {
+            try {
+                const response = await fetch(INVENTORY_URL);
+                if (!response.ok) throw new Error(`Error HTTP: ${response.status}`);
+                
+                const csvText = await response.text();
+                
+                const rows = csvText.split('\n').filter(row => row.trim().length > 0);
+                if (rows.length < 2) {
+                    throw new Error('El archivo de datos no contiene suficientes filas (mínimo 2: encabezado + datos).');
+                }
+                
+                const parseRow = (row) => row.split(DELIMITER).map(v => v.trim().replace(/"/g, ''));
+
+                const headers = parseRow(rows[0]);
+                console.log('Encabezados detectados en el archivo:', headers); 
+                const data = [];
+
+                for (let i = 1; i < rows.length; i++) {
+                    const rowValues = parseRow(rows[i]);
+                    
+                    if (rowValues.length !== headers.length) {
+                        console.warn(`Fila ${i + 1} omitida: el número de columnas (${rowValues.length}) no coincide con el encabezado (${headers.length}).`);
+                        continue;
+                    }
+                    
+                    const rowData = {};
+                    headers.forEach((header, index) => {
+                        rowData[header] = rowValues[index] || '';
+                    });
+                    
+                    if (rowData[COLUMNS.ARTICULO] && rowData[COLUMNS.ARTICULO].trim() !== '') {
+                        data.push(rowData);
+                    }
+                }
+                
+                console.log(`Datos cargados exitosamente: ${data.length} registros. Delimitador usado: "${DELIMITER}"`);
+                return data;
+
+            } catch (error) {
+                console.error("Error al obtener o parsear los datos:", error);
+                showMessage(`Error al cargar los datos: ${error.message}. Confirma que el archivo está publicado y usa '${DELIMITER}' como separador.`, 'error'); 
+                return [];
+            }
+        }
+        
+        /**
+         * Configura el dropdown de Supervisores y listeners de búsqueda.
+         */
+        function setupApp(data) {
+            allInventoryData = data;
+            loadingDiv.classList.add('hidden'); // Ocultar loader
+
+            if (data.length === 0) {
+                supervisorSelect.innerHTML = '<option value="">No se encontraron datos</option>';
+                return;
+            }
+
+            // 1. Inicializar Dropdown de Supervisor
+            const supervisors = [...new Set(data.map(item => item[COLUMNS.SUPERVISOR]).filter(s => s && s.length > 0))].sort();
+            
+            supervisorSelect.innerHTML = `<option value="">--- Seleccione un Supervisor ---</option>`;
+            supervisors.forEach(supervisor => {
+                const option = document.createElement('option');
+                option.value = supervisor;
+                option.textContent = supervisor;
+                supervisorSelect.appendChild(option);
+            });
+            supervisorSelect.disabled = false;
+            
+            // 2. Configurar Listeners
+            supervisorSelect.addEventListener('change', handleSupervisorChange);
+            inputBarra.addEventListener('input', handleSearch);
+            inputArticulo.addEventListener('input', handleSearch);
+
+            // 3. Configurar Listeners para ordenación de tabla
+            // Usamos COD_SALA como columna para la ordenación de la sala concatenada
+            document.getElementById('header-COD_SALA').addEventListener('click', () => handleSort(COLUMNS.COD_SALA, 'string'));
+            document.getElementById('header-EXISTENCIA').addEventListener('click', () => handleSort(COLUMNS.EXISTENCIA, 'numeric'));
+
+            filteredData = allInventoryData;
+            hideResults();
+        }
+
+        /**
+         * Maneja el cambio en el filtro de Supervisor.
+         */
+        function handleSupervisorChange() {
+            const selectedSupervisor = supervisorSelect.value;
+            
+            if (selectedSupervisor) {
+                filteredData = allInventoryData.filter(item => (item[COLUMNS.SUPERVISOR] || '').trim() === selectedSupervisor.trim());
+                searchContainer.classList.remove('hidden');
+                showMessage(`Filtrado por: ${selectedSupervisor}. Ahora ingrese BARRA o ARTICULO.`, 'info');
+            } else {
+                filteredData = allInventoryData;
+                searchContainer.classList.add('hidden');
+                showMessage('');
+            }
+            
+            inputBarra.value = '';
+            inputArticulo.value = '';
+            hideResults();
+        }
+
+        /**
+         * Maneja la lógica de búsqueda basada en BARRA o ARTICULO.
+         */
+        function handleSearch() {
+            const barra = inputBarra.value.trim();
+            const articulo = inputArticulo.value.trim();
+            
+            hideResults();
+            showMessage('');
+            
+            if (!barra && !articulo) return;
+
+            let searchField, searchValue;
+            if (barra) {
+                searchField = COLUMNS.BARRA;
+                searchValue = barra;
+                inputArticulo.value = ''; 
+            } else if (articulo) {
+                searchField = COLUMNS.ARTICULO;
+                searchValue = articulo;
+                inputBarra.value = ''; 
+            } else {
+                return;
+            }
+            
+            const results = filteredData.filter(item => (item[searchField] || '').trim() === searchValue);
+
+            if (results.length > 0) {
+                const articleSummaryData = results[0];
+                
+                // Almacenar las filas de detalle sin ordenar
+                currentDetailRows = results; 
+
+                // Mostrar resultados, por defecto ordenado por COD_SALA ascendente si no se ha ordenado antes
+                currentSortColumn = COLUMNS.COD_SALA;
+                currentSortOrder = 'asc';
+                renderResults(articleSummaryData, sortData(currentDetailRows, currentSortColumn, 'string', currentSortOrder));
+            } else {
+                showMessage(`No se encontraron resultados para ${searchField}: ${searchValue}.`, 'error');
+            }
+        }
+
+        /**
+         * Oculta y limpia las secciones de resultados.
+         */
+        function hideResults() {
+            resultsContainer.classList.add('hidden'); // Ocultar el contenedor principal de resultados
+            
+            articleSummary.innerHTML = '';
+            salaDetailTableBody.innerHTML = '';
+            fechaActualizacionElement.textContent = '';
+            currentDetailRows = [];
+            currentSortColumn = null;
+            currentSortOrder = 'asc';
+            updateSortIcons();
+        }
+
+        /**
+         * Maneja el evento de clic en los encabezados para ordenar.
+         * @param {string} column Clave de la columna a ordenar.
+         * @param {string} type Tipo de dato ('string' o 'numeric').
+         */
+        function handleSort(column, type) {
+            if (currentDetailRows.length === 0) return;
+
+            // Determinar la nueva dirección de ordenación
+            if (currentSortColumn === column) {
+                currentSortOrder = currentSortOrder === 'asc' ? 'desc' : 'asc';
+            } else {
+                currentSortColumn = column;
+                currentSortOrder = 'asc'; // Ordenación inicial por defecto
+            }
+
+            // Ordenar y re-renderizar
+            const sortedData = sortData(currentDetailRows, currentSortColumn, type, currentSortOrder);
+            renderTableBody(sortedData);
+            updateSortIcons();
+        }
+
+        /**
+         * Ordena los datos de detalle.
+         */
+        function sortData(data, column, type, order) {
+            return [...data].sort((a, b) => {
+                const valA = a[column] || '';
+                const valB = b[column] || '';
+
+                if (type === 'numeric') {
+                    const numA = parseFloat(valA.replace(/[^0-9.-]+/g, "")) || 0;
+                    const numB = parseFloat(valB.replace(/[^0-9.-]+/g, "")) || 0;
+                    
+                    if (order === 'asc') return numA - numB;
+                    return numB - numA;
+                } else { // string
+                    const strA = valA.toLowerCase();
+                    const strB = valB.toLowerCase();
+                    
+                    if (order === 'asc') {
+                        if (strA < strB) return -1;
+                        if (strA > strB) return 1;
+                        return 0;
+                    } else {
+                        if (strA > strB) return -1;
+                        if (strA < strB) return 1;
+                        return 0;
+                    }
+                }
+            });
+        }
+
+        /**
+         * Actualiza los íconos de ordenación en los encabezados.
+         */
+        function updateSortIcons() {
+            document.querySelectorAll('.sortable-header').forEach(header => {
+                const column = header.getAttribute('data-column');
+                const ascIcon = header.querySelector('.sort-asc');
+                const descIcon = header.querySelector('.sort-desc');
+
+                // Resetear todos los íconos
+                if (ascIcon) {
+                    ascIcon.classList.remove('active');
+                    ascIcon.classList.add('inactive');
+                }
+                if (descIcon) {
+                    descIcon.classList.remove('active');
+                    descIcon.classList.add('inactive');
+                }
+
+                // Activar el ícono de la columna de ordenación actual
+                if (column === currentSortColumn) {
+                    if (currentSortOrder === 'asc' && ascIcon) {
+                        ascIcon.classList.add('active');
+                        ascIcon.classList.remove('inactive');
+                    } else if (currentSortOrder === 'desc' && descIcon) {
+                        descIcon.classList.add('active');
+                        descIcon.classList.remove('inactive');
+                    }
+                }
+            });
+        }
+
+        /**
+         * Renderiza solo el cuerpo de la tabla.
+         */
+        function renderTableBody(rows) {
+            salaDetailTableBody.innerHTML = rows.map(row => {
+                const pedidoSalaValue = row[COLUMNS.PEDIDO_SALA] || '0';
+                const existenciaValue = parseFloat((row[COLUMNS.EXISTENCIA] || '0').replace(/[^0-9.-]+/g, "")) || 0; // Obtener valor numérico de EXISTENCIA
+                const dohValue = row[COLUMNS.DOH] || '0'; // Obtener valor DOH
+                
+                // Lógica para PEDIDO SALA: NO (insensible a mayúsculas/minúsculas)
+                const isPedidoNo = (typeof pedidoSalaValue === 'string' && pedidoSalaValue.trim().toUpperCase() === 'NO');
+
+                // Lógica para EXISTENCIA: <= 1 (DEFINE LA ATENUACIÓN DE LA FILA Y EL COLOR DEL VALOR)
+                const isExistenciaLow = existenciaValue <= 1;
+
+                // Aplicar clase para el color del texto de PEDIDO SALA
+                const pedidoColorClass = isPedidoNo ? 'text-red-600' : 'text-secondary';
+                
+                // Aplicar clase para el color del texto de EXISTENCIA
+                const existenciaColorClass = isExistenciaLow ? 'text-red-600' : 'text-primary';
+
+                // Aplicar clase para el fondo de la fila (Gris si es EXISTENCIA BAJA)
+                const rowBgClass = isExistenciaLow ? 'bg-gray-100 hover:bg-red-50' : 'hover:bg-blue-50';
+
+                // Determinar la clase de color para el resto de las celdas de la fila (Atenuar si EXISTENCIA BAJA)
+                const defaultTextColor = isExistenciaLow ? 'text-gray-500' : 'text-gray-900';
+                const defaultTextMedium = isExistenciaLow ? 'text-gray-500' : 'text-gray-700';
+                const monoTextColor = isExistenciaLow ? 'text-gray-500' : 'text-secondary';
+                
+                // Concatenación de SALA
+                const salaConcatenada = `${row[COLUMNS.COD_SALA] || ''} - ${row[COLUMNS.NOMBRE_SALA] || ''}`;
+
+
+                return `
+                    <tr class="${rowBgClass} transition duration-100">
+                        <!-- Aplicar ancho de columna a la celda de datos -->
+                        <td class="w-2/6 px-2 py-2 whitespace-normal text-sm font-medium ${defaultTextColor} break-words">${salaConcatenada}</td>
+                        <td class="w-1/6 px-2 py-2 whitespace-nowrap text-xs text-right font-mono ${existenciaColorClass}">${row[COLUMNS.EXISTENCIA] || '0'}</td>
+                        <td class="w-1/6 px-2 py-2 whitespace-nowrap text-xs text-right font-mono ${monoTextColor}">${row[COLUMNS.TRANSITOS] || '0'}</td>
+                        <td class="w-1/6 px-2 py-2 whitespace-nowrap text-xs text-right font-mono ${pedidoColorClass}">${pedidoSalaValue}</td>
+                        <td class="w-1/6 px-2 py-2 whitespace-nowrap text-xs text-right font-mono ${defaultTextColor}">${dohValue}</td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        /**
+         * Renderiza el resumen y el detalle del artículo.
+         * @param {Object} summaryData Datos del resumen del artículo.
+         * @param {Array<Object>} detailRows Filas de detalle por sala del artículo (ya ordenadas).
+         */
+        function renderResults(summaryData, detailRows) {
+            // 3. Renderizar Resumen del Artículo
+            const summaryFields = [
+                { key: COLUMNS.DESCRIPCION, label: 'DESCRIPCION' },
+                { key: COLUMNS.MARCA, label: 'MARCA' },
+                { key: COLUMNS.STATUS_MARCA, label: 'STATUS MARCA' },
+                { key: COLUMNS.STOCK_RANSA, label: 'STOCK RANSA' },
+                { key: COLUMNS.UXC, label: 'UXC' },
+            ];
+            
+            articleSummary.innerHTML = summaryFields.map(field => `
+                <div class="p-2 bg-gray-50 rounded-lg border border-gray-200">
+                    <p class="text-xs font-semibold uppercase text-gray-500">${field.label}:</p>
+                    <p class="text-sm font-medium text-gray-900 break-words">${summaryData[field.key] || 'N/A'}</p>
+                </div>
+            `).join('');
+            
+            // 4. Renderizar Detalle por Sala (usa la función separada)
+            renderTableBody(detailRows);
+            updateSortIcons();
+
+            // Renderizar la nota de actualización
+            const fecha = summaryData[COLUMNS.FECHA_ACTUALIZACION] || 'Fecha no disponible';
+            fechaActualizacionElement.textContent = `Última Actualización de la Base: ${fecha}`;
+
+
+            // Mostrar el contenedor principal
+            resultsContainer.classList.remove('hidden');
+        }
+
+        /**
+         * Restablece la aplicación a su estado inicial.
+         */
+        window.resetFilters = () => {
+            supervisorSelect.value = '';
+            inputBarra.value = '';
+            inputArticulo.value = '';
+            handleSupervisorChange();
+            showMessage('');
+        }
+
+        // Inicialización de la aplicación
+        document.addEventListener('DOMContentLoaded', async () => {
+            loadingDiv.classList.remove('hidden'); 
+            const data = await fetchAndParseInventory();
+            setupApp(data);
+        });
+
+    </script>
+</body>
+</html>
