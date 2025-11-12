@@ -160,6 +160,10 @@
                                             </div>
                                         </div>
                                     </th>
+                                    
+                                    <!-- NUEVO CAMPO: CLAS SALA -->
+                                    <th class="w-1/6 px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">CLAS SALA</th>
+
                                     <!-- EXISTENCIA: Habilitado para ordenar -->
                                     <th id="header-EXISTENCIA" class="w-1/6 px-2 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider sortable-header" data-column="EXISTENCIA" data-type="numeric" data-order="asc">
                                         <div class="flex items-center justify-end">
@@ -212,6 +216,7 @@
             PACKS_CAJA: 'PACKS X CAJA', // Nuevo campo: Packs por Caja
             COD_SALA: 'COD_SALA',
             NOMBRE_SALA: 'NOMBE_SALA', 
+            NUEVA_CLASIFICACION_SALA: 'NUEVA CLASIFICACION SALA', // NUEVO CAMPO
             EXISTENCIA: 'EXISTENCIA',
             TRANSITOS: 'TRANSITOS A SALAS UDS',
             PEDIDO_SALA: 'PEDIDO SALA',
@@ -528,6 +533,7 @@
                 const pedidoSalaValue = row[COLUMNS.PEDIDO_SALA] || '0';
                 const existenciaValue = parseFloat((row[COLUMNS.EXISTENCIA] || '0').replace(/[^0-9.-]+/g, "")) || 0; // Obtener valor numérico de EXISTENCIA
                 const dohValue = row[COLUMNS.DOH] || '0'; // Obtener valor DOH
+                const clasSalaValue = row[COLUMNS.NUEVA_CLASIFICACION_SALA] || 'N/A'; // Obtener valor CLAS SALA
                 
                 // Lógica para PEDIDO SALA: NO (insensible a mayúsculas/minúsculas)
                 const isPedidoNo = (typeof pedidoSalaValue === 'string' && pedidoSalaValue.trim().toUpperCase() === 'NO');
@@ -546,7 +552,6 @@
 
                 // Determinar la clase de color para el resto de las celdas de la fila (Atenuar si EXISTENCIA BAJA)
                 const defaultTextColor = isExistenciaLow ? 'text-gray-500' : 'text-gray-900';
-                const defaultTextMedium = isExistenciaLow ? 'text-gray-500' : 'text-gray-700';
                 const monoTextColor = isExistenciaLow ? 'text-gray-500' : 'text-secondary';
                 
                 // Concatenación de SALA
@@ -555,11 +560,17 @@
 
                 return `
                     <tr class="${rowBgClass} transition duration-100">
-                        <!-- Aplicar ancho de columna a la celda de datos -->
+                        <!-- Columna SALA -->
                         <td class="w-2/6 px-2 py-2 whitespace-normal text-sm font-medium ${defaultTextColor} break-words">${salaConcatenada}</td>
+                        <!-- Columna CLAS SALA -->
+                        <td class="w-1/6 px-2 py-2 whitespace-nowrap text-xs text-left font-medium ${defaultTextColor}">${clasSalaValue}</td>
+                        <!-- Columna EXISTENCIA -->
                         <td class="w-1/6 px-2 py-2 whitespace-nowrap text-xs text-right font-mono ${existenciaColorClass}">${row[COLUMNS.EXISTENCIA] || '0'}</td>
+                        <!-- Columna TRANSITOS -->
                         <td class="w-1/6 px-2 py-2 whitespace-nowrap text-xs text-right font-mono ${monoTextColor}">${row[COLUMNS.TRANSITOS] || '0'}</td>
+                        <!-- Columna PEDIDO SALA -->
                         <td class="w-1/6 px-2 py-2 whitespace-nowrap text-xs text-right font-mono ${pedidoColorClass}">${pedidoSalaValue}</td>
+                        <!-- Columna DOH -->
                         <td class="w-1/6 px-2 py-2 whitespace-nowrap text-xs text-right font-mono ${defaultTextColor}">${dohValue}</td>
                     </tr>
                 `;
@@ -659,6 +670,7 @@
     </script>
 </body>
 </html>
+
 
 
 
