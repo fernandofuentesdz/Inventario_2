@@ -209,13 +209,14 @@
             STATUS_MARCA: 'STATUS MARCA',
             STOCK_RANSA: 'STOCK RANSA',
             UXC: 'UXC',
+            PACKS_CAJA: 'PACKS X CAJA', // Nuevo campo: Packs por Caja
             COD_SALA: 'COD_SALA',
             NOMBRE_SALA: 'NOMBE_SALA', 
             EXISTENCIA: 'EXISTENCIA',
             TRANSITOS: 'TRANSITOS A SALAS UDS',
             PEDIDO_SALA: 'PEDIDO SALA',
-            DOH: 'DOH', // Mapeo para el nuevo campo DOH
-            FECHA_ACTUALIZACION: 'FECHA ACTUALIZACION' // Nuevo campo
+            DOH: 'DOH', 
+            FECHA_ACTUALIZACION: 'FECHA ACTUALIZACION' 
         };
 
         let allInventoryData = []; 
@@ -566,26 +567,63 @@
         }
 
         /**
+         * Calcula el campo "UNIDADES X PACKS".
+         */
+        function calculateUnidadesXacks(uxcValue, packsCajaValue) {
+            const uxc = parseFloat(uxcValue.replace(/[^0-9.-]+/g, "")) || 0;
+            const packsCaja = parseFloat(packsCajaValue.replace(/[^0-9.-]+/g, "")) || 0;
+
+            if (packsCaja > 0) {
+                const result = uxc / packsCaja;
+                // Formatear a un decimal, o a entero si es exacto
+                return Number.isInteger(result) ? result.toString() : result.toFixed(1);
+            }
+            return 'N/A';
+        }
+
+        /**
          * Renderiza el resumen y el detalle del artículo.
          * @param {Object} summaryData Datos del resumen del artículo.
          * @param {Array<Object>} detailRows Filas de detalle por sala del artículo (ya ordenadas).
          */
         function renderResults(summaryData, detailRows) {
-            // 3. Renderizar Resumen del Artículo
+            // Calcular el nuevo campo
+            const uxcValue = summaryData[COLUMNS.UXC] || '0';
+            const packsCajaValue = summaryData[COLUMNS.PACKS_CAJA] || '0';
+            const unidadesXPacks = calculateUnidadesXacks(uxcValue, packsCajaValue);
+
             const summaryFields = [
                 { key: COLUMNS.DESCRIPCION, label: 'DESCRIPCION' },
                 { key: COLUMNS.MARCA, label: 'MARCA' },
                 { key: COLUMNS.STATUS_MARCA, label: 'STATUS MARCA' },
                 { key: COLUMNS.STOCK_RANSA, label: 'STOCK RANSA' },
                 { key: COLUMNS.UXC, label: 'UXC' },
+                // Nuevo campo calculado
+                { key: 'UNIDADES_X_PACKS', label: 'UNIDADES X PACKS', value: unidadesXPacks },
             ];
             
-            articleSummary.innerHTML = summaryFields.map(field => `
-                <div class="p-2 bg-gray-50 rounded-lg border border-gray-200">
-                    <p class="text-xs font-semibold uppercase text-gray-500">${field.label}:</p>
-                    <p class="text-sm font-medium text-gray-900 break-words">${summaryData[field.key] || 'N/A'}</p>
-                </div>
-            `).join('');
+            // Renderizar Resumen del Artículo (3. Resumen del Artículo)
+            articleSummary.innerHTML = summaryFields.map(field => {
+                // Si es un campo calculado, usar 'field.value', sino usar 'summaryData[field.key]'
+                const value = field.value !== undefined ? field.value : (summaryData[field.key] || 'N/A');
+
+                // Asegurar que UXC también se muestra, incluso si no es para el cálculo
+                if (field.key === COLUMNS.UXC) {
+                    return `
+                        <div class="p-2 bg-gray-50 rounded-lg border border-gray-200">
+                            <p class="text-xs font-semibold uppercase text-gray-500">UXC:</p>
+                            <p class="text-sm font-medium text-gray-900 break-words">${value}</p>
+                        </div>
+                    `;
+                }
+                
+                return `
+                    <div class="p-2 bg-gray-50 rounded-lg border border-gray-200">
+                        <p class="text-xs font-semibold uppercase text-gray-500">${field.label}:</p>
+                        <p class="text-sm font-medium text-gray-900 break-words">${value}</p>
+                    </div>
+                `;
+            }).join('');
             
             // 4. Renderizar Detalle por Sala (usa la función separada)
             renderTableBody(detailRows);
